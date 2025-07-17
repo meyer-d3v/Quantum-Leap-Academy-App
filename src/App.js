@@ -160,7 +160,7 @@ const App = () => {
             console.error("Error updating module:", error);
             setErrorMessage(`Failed to save module progress: ${error.message}`);
         }
-    }, [db, userId, getModuleDocRef, appId]); // appId is a dependency
+    }, [db, userId, getModuleDocRef]); // appId is a dependency (Dean: removed appId as it was causing issues with deploying the app)
 
     // --- AI Generation for Resources and Assignments ---
     const generateModuleContent = useCallback(async (moduleName, moduleId) => {
