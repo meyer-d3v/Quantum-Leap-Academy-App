@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit } from 'firebase/firestore'; // Removed orderBy import as it's not used in query
+import { db, auth, firebaseConfig } from "../firebase";
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit, } from 'firebase/firestore'; // Removed orderBy import as it's not used in query
 
-// Shim for process.env in browser environments, if not already defined
-// This helps ensure process.env is available even if the build tool doesn't fully polyfill it.
-if (typeof window.process === 'undefined') {
-    window.process = { env: {} };
-}
+
 
 // Main App component for the Quantum Leap AI Education Academy
 const App = () => {
@@ -46,17 +42,7 @@ const App = () => {
     // These variables should be defined in your .env file in the project root
     const appId = process.env.REACT_APP_CUSTOM_APP_ID || 'default-quantum-leap-app';
     
-    // Use useMemo to ensure firebaseConfig object is stable across renders
-    // FIX: This ensures the firebaseConfig object is created only once, resolving the ESLint warning.
-    const firebaseConfig = useMemo(() => ({
-        apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-        authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-        appId: process.env.REACT_APP_FIREBASE_APP_ID,
-        measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
-    }), []); // Empty dependency array means it's created once
+    
 
     // initialAuthToken is typically for specific Canvas/LTI environments.
     // For a standard React app, we'll sign in anonymously if no other auth is used.
@@ -68,22 +54,19 @@ const App = () => {
     // --- Firebase Initialization and Authentication ---
     useEffect(() => {
         // Basic validation for firebaseConfig
-        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+        if (!db.apiKey || !db.projectId) {
             setErrorMessage("Firebase configuration is missing. Please check your .env file.");
             setIsAuthReady(true); // Mark as ready to avoid infinite loading, but with error
             return;
         }
 
         try {
-            const app = initializeApp(firebaseConfig);
-            const firestore = getFirestore(app);
-            const firebaseAuth = getAuth(app);
 
-            setDb(firestore);
-            setAuth(firebaseAuth);
+            setDb(db);
+            setAuth(auth);
 
             // Listen for auth state changes
-            const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+            const unsubscribe = onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     setUserId(user.uid);
                     console.log("Authenticated as:", user.uid);
@@ -91,9 +74,9 @@ const App = () => {
                     // Sign in anonymously if no token or token fails
                     try {
                         if (initialAuthToken === null) {
-                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                            //await signInWithCustomToken(firebaseAuth, initialAuthToken);
                         } else {
-                            await signInAnonymously(firebaseAuth);
+                            await signInAnonymously(auth);
                         }
                     } catch (error) {
                         console.error("Firebase auth error during anonymous/custom token sign-in:" + error);
@@ -121,12 +104,21 @@ const App = () => {
         const q = query(modulesCollectionRef, limit(100)); // Order by creation for display
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedModules = snapshot.docs.map(doc => ({
+            type Module = {
+                id: string;
+                createdAt?: string | number;
+                [key: string]: any;
+            };
+            const fetchedModules: Module[] = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
             // Sort in memory if orderBy was removed from query
-            fetchedModules.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            fetchedModules.sort((a, b) => {
+                const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return bDate - aDate;
+            });
             setModules(fetchedModules);
             console.log("Fetched modules:", fetchedModules);
         }, (error) => {
@@ -201,7 +193,8 @@ const App = () => {
                 body: JSON.stringify(resourcePayload)
             });
             const resourceResult = await resourceResponse.json();
-            let parsedResources = [];
+            type Resource = { title: string; url: string };
+            let parsedResources: Resource[] = [];
             if (resourceResult.candidates && resourceResult.candidates.length > 0 && resourceResult.candidates[0].content && resourceResult.candidates[0].content.parts && resourceResult.candidates[0].content.parts.length > 0) {
                 try {
                     parsedResources = JSON.parse(resourceResult.candidates[0].content.parts[0].text);
@@ -296,24 +289,22 @@ const App = () => {
                             },
                             required: ["section_id", "section_title", "marks", "sub_scenario", "tasks"]
                         }
+                    },
+                    resources: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                title: { type: "STRING" },
+                                url: { type: "STRING" },
+                                type: { type: "STRING", enum: ["website", "video", "pdf", "book"] },
+                                category: { type: "STRING" }
+                            },
+                            required: ["title", "url", "type", "category"]
+                        }
                     }
                 },
                 required: ["title", "total_marks", "scenario", "sections"] // Removed resources from required for now, as AI might sometimes omit it
-            };
-
-            // Add resources property to the schema dynamically if needed, or handle it as optional
-            assignmentSchema.properties.resources = {
-                type: "ARRAY",
-                items: {
-                    type: "OBJECT",
-                    properties: {
-                        title: { type: "STRING" },
-                        url: { type: "STRING" },
-                        type: { type: "STRING", enum: ["website", "video", "pdf", "book"] },
-                        category: { type: "STRING" }
-                    },
-                    required: ["title", "url", "type", "category"]
-                }
             };
 
 
@@ -337,7 +328,7 @@ const App = () => {
             }
 
             const assignmentResult = await assignmentResponse.json();
-            let parsedAssignment = null;
+            let parsedAssignment: any = null;
             if (assignmentResult.candidates && assignmentResult.candidates.length > 0 && assignmentResult.candidates[0].content && assignmentResult.candidates[0].content.parts && assignmentResult.candidates[0].content.parts.length > 0) {
                 try {
                     parsedAssignment = JSON.parse(assignmentResult.candidates[0].content.parts[0].text);
@@ -428,7 +419,8 @@ const App = () => {
             await generateModuleContent(newModuleData.name, moduleId);
             const updatedModuleDoc = await getDoc(getModuleDocRef(moduleId));
             if (updatedModuleDoc.exists()) {
-                setCurrentModule({ id: updatedModuleDoc.id, ...updatedModuleDoc.data() });
+                const updatedData = updatedModuleDoc.data() || {};
+                setCurrentModule({ id: updatedModuleDoc.id, ...updatedData });
             }
             setCurrentAssignmentSectionIndex(0); // Reset to first section for new assignment
             setAssignmentResponses({}); // Clear previous responses
@@ -463,9 +455,10 @@ const App = () => {
                 // After generation, fetch the updated module to ensure state is consistent
                 const updatedModuleDoc = await getDoc(getModuleDocRef(module.id));
                 if (updatedModuleDoc.exists()) {
-                    setCurrentModule({ id: updatedModuleDoc.id, ...updatedModuleDoc.data() });
-                    setAssignmentContent(updatedModuleDoc.data().assignmentContent); // Update assignment content state
-                    setTeacherPicks(updatedModuleDoc.data().teacherPicks); // Update teacher picks state
+                    const updatedData = updatedModuleDoc.data() || {};
+                    setCurrentModule({ id: updatedModuleDoc.id, ...updatedData });
+                    setAssignmentContent((updatedModuleDoc.data() as any).assignmentContent); // Update assignment content state
+                    setTeacherPicks((updatedModuleDoc.data() as any).teacherPicks); // Update teacher picks state
                 }
                 setLoading(false);
             }
@@ -592,7 +585,7 @@ const App = () => {
         setAssessmentMetrics(simulatedMetrics);
 
         try {
-            let chatHistory = [];
+            let chatHistory: { role: string; parts: { text: string }[] }[] = [];
             chatHistory.push({ role: "user", parts: [{ text: promptSpecific }] });
 
             const payload = {

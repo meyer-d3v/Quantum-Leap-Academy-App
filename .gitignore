@@ -19,6 +19,13 @@
 .env.test.local
 .env.production.local
 
+# firebase
+firebase.js
+
+# Gemini 
+gemini.js
+
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
