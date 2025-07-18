@@ -8,18 +8,35 @@ import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit
 // Main App component for the Quantum Leap AI Education Academy
 const App = () => {
     // --- Firebase State ---
-    const [db, setDb] = useState(null);
-    // eslint-disable-next-line no-unused-vars
-    const [auth, setAuth] = useState(null); // auth is used internally by Firebase, but not directly in JSX
-    const [userId, setUserId] = useState(null);
+    const [userId, setUserId] = useState<string | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false); // To ensure Firestore ops wait for auth
 
     // --- App State ---
-    const [currentModule, setCurrentModule] = useState(null); // The currently active module object
-    const [modules, setModules] = useState([]); // List of all modules for the current user
+    type Module = {
+        id: string;
+        name: string;
+        status: string;
+        resources: any[];
+        teacherPicks?: any[];
+        assignmentContent?: any;
+        assignments?: any;
+        quizzes: any[];
+        finalTestScore: number;
+        certificateIssued: boolean;
+        createdAt?: string;
+        lastUpdated?: string;
+        [key: string]: any;
+    };
+    const [currentModule, setCurrentModule] = useState<Module | null>(null); // The currently active module object
+    const [modules, setModules] = useState<Module[]>([]); // List of all modules for the current user
     const [topic, setTopic] = useState(''); // Input for new module topic
     const [resourceInput, setResourceInput] = useState(''); // Input for new resource URL/description
-    const [questions, setQuestions] = useState([]); // AI-generated test questions
+    type Question = {
+        question: string;
+        options: { [key: string]: string };
+        correctAnswer: string;
+    };
+    const [questions, setQuestions] = useState<Question[]>([]); // AI-generated test questions
     const [userAnswers, setUserAnswers] = useState({}); // User's selected answers
     // eslint-disable-next-line no-unused-vars
     const [score, setScore] = useState(0); // Current assessment score (used in submitTest, but ESLint might miss it if not in JSX)
@@ -29,10 +46,45 @@ const App = () => {
     const [loading, setLoading] = useState(false); // Loading indicator for AI generation
     const [errorMessage, setErrorMessage] = useState(''); // Error messages
     const [appPhase, setAppPhase] = useState('moduleSelect'); // 'moduleSelect', 'resources', 'assignment', 'quiz', 'finalTest', 'results'
-    const [assessmentMetrics, setAssessmentMetrics] = useState(null); // AI's meta-commentary on assessment
-    const [lastScoreDetails, setLastScoreDetails] = useState(null); // Details for module results table
-    const [teacherPicks, setTeacherPicks] = useState([]); // Dynamically generated teacher's picks
-    const [assignmentContent, setAssignmentContent] = useState(null); // Dynamically generated assignment content
+    type assessmentMetrics = {
+        practicalityTheoreticity: string;
+        predictability: string;
+        difficulty: string;
+        alignment: string;
+        learningTime: string;
+        proficiencyRequired: string;
+    } | null;
+    const [assessmentMetrics, setAssessmentMetrics] = useState<assessmentMetrics>(null); // AI's meta-commentary on assessment
+    type LastScoreDetails = {
+        score: number;
+        comment: string;
+        certificateIssued: boolean;
+    } | null;
+    
+    const [lastScoreDetails, setLastScoreDetails] = useState<LastScoreDetails>(null); // Details for module results table
+    type Resource = { title: string; url: string }; // Add this type at the top-level if not already present
+    const [teacherPicks, setTeacherPicks] = useState<Resource[]>([]); // Dynamically generated teacher's picks
+    type AssignmentSection = {
+        section_id: string;
+        section_title: string;
+        marks: number;
+        sub_scenario: { title: string; description: string };
+        tasks: {
+            task_id: string;
+            task_description: string;
+            marks: number;
+            type: string;
+            language?: string;
+        }[];
+    };
+    type AssignmentContent = {
+        title: string;
+        total_marks: number;
+        scenario: { title: string; description: string };
+        sections: AssignmentSection[];
+        resources: { title: string; url: string; type: string; category: string }[];
+    } | null;
+    const [assignmentContent, setAssignmentContent] = useState<AssignmentContent>(null); // Dynamically generated assignment content
 
     // --- NEW Assignment State ---
     const [currentAssignmentSectionIndex, setCurrentAssignmentSectionIndex] = useState(0);
@@ -54,19 +106,18 @@ const App = () => {
     // --- Firebase Initialization and Authentication ---
     useEffect(() => {
         // Basic validation for firebaseConfig
-        if (!db.apiKey || !db.projectId) {
+        if (!firebaseConfig || !('apiKey' in firebaseConfig) || !('projectId' in firebaseConfig) || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
             setErrorMessage("Firebase configuration is missing. Please check your .env file.");
             setIsAuthReady(true); // Mark as ready to avoid infinite loading, but with error
             return;
         }
 
+        let unsubscribeModules: (() => void) | null = null;
+        let unsubscribeAuth: (() => void) | null = null;
+
         try {
-
-            setDb(db);
-            setAuth(auth);
-
             // Listen for auth state changes
-            const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     setUserId(user.uid);
                     console.log("Authenticated as:", user.uid);
@@ -85,60 +136,67 @@ const App = () => {
                 }
                 setIsAuthReady(true); // Auth state is now known
             });
-
-            return () => unsubscribe(); // Cleanup auth listener
         } catch (error) {
             console.error("Firebase initialization failed:", error);
             setErrorMessage("Failed to initialize the academy. Check console for details.");
             setIsAuthReady(true); // Mark as ready to avoid infinite loading, but with error
         }
-    }, [firebaseConfig, initialAuthToken]); // Dependencies for useEffect
 
-    // --- Fetch Modules from Firestore ---
-    useEffect(() => {
-        // Ensure db, userId, and auth readiness before attempting to fetch
-        if (!db || !userId || !isAuthReady) return;
+        // Listen for modules only after auth is ready and userId is set
+        if (db && userId && isAuthReady) {
+            const modulesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/modules`);
+            // orderBy is commented out as per previous instructions to avoid index issues
+            const q = query(modulesCollectionRef, limit(100)); // Order by creation for display
 
-        const modulesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/modules`);
-        // orderBy is commented out as per previous instructions to avoid index issues
-        const q = query(modulesCollectionRef, limit(100)); // Order by creation for display
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            type Module = {
-                id: string;
-                createdAt?: string | number;
-                [key: string]: any;
-            };
-            const fetchedModules: Module[] = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            // Sort in memory if orderBy was removed from query
-            fetchedModules.sort((a, b) => {
-                const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                return bDate - aDate;
+            unsubscribeModules = onSnapshot(q, (snapshot) => {
+                const fetchedModules: Module[] = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        name: data.name ?? '',
+                        status: data.status ?? '',
+                        resources: data.resources ?? [],
+                        teacherPicks: data.teacherPicks ?? [],
+                        assignmentContent: data.assignmentContent ?? null,
+                        assignments: data.assignments ?? {},
+                        quizzes: data.quizzes ?? [],
+                        finalTestScore: data.finalTestScore ?? 0,
+                        certificateIssued: data.certificateIssued ?? false,
+                        createdAt: data.createdAt ?? '',
+                        lastUpdated: data.lastUpdated ?? '',
+                        ...data
+                    };
+                });
+                // Sort in memory if orderBy was removed from query
+                fetchedModules.sort((a, b) => {
+                    const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return bDate - aDate;
+                });
+                setModules(fetchedModules);
+                console.log("Fetched modules:", fetchedModules);
+            }, (error) => {
+                console.error("Error fetching modules:", error);
+                setErrorMessage("Failed to load your modules.");
             });
-            setModules(fetchedModules);
-            console.log("Fetched modules:", fetchedModules);
-        }, (error) => {
-            console.error("Error fetching modules:", error);
-            setErrorMessage("Failed to load your modules.");
-        });
+        }
 
-        return () => unsubscribe(); // Cleanup snapshot listener
-    }, [db, userId, appId, isAuthReady]);
+        return () => {
+            if (unsubscribeAuth) unsubscribeAuth();
+            if (unsubscribeModules) unsubscribeModules();
+        };
+    }, [firebaseConfig, initialAuthToken, db, userId, appId, isAuthReady]);
 
     // --- Firestore Helpers ---
     // FIX: Re-added appId to useCallback dependency array to resolve ESLint warning.
     const getModuleDocRef = useCallback((moduleId) => {
-        if (!db || !userId) return null;
+        if (!userId) return null;
         return doc(db, `artifacts/${appId}/users/${userId}/modules`, moduleId);
-    }, [db, userId, appId]); // appId is a dependency
+    }, [userId, appId]); // appId is a dependency
 
     // FIX: Re-added appId to useCallback dependency array to resolve ESLint warning.
     const updateModuleInFirestore = useCallback(async (moduleId, data) => {
-        if (!db || !userId) {
+        if (!userId) {
             setErrorMessage("Database not ready. Please try again.");
             return;
         }
@@ -152,9 +210,9 @@ const App = () => {
             console.error("Error updating module:", error);
             setErrorMessage(`Failed to save module progress: ${error.message}`);
         }
-    }, [db, userId, getModuleDocRef]); // appId is a dependency (Dean: removed appId as it was causing issues with deploying the app)
+    }, [userId, getModuleDocRef]); // appId is a dependency (Dean: removed appId as it was causing issues with deploying the app)
 
-    // --- AI Generation for Resources and Assignments ---
+    // Make generateModuleContent async to allow use of await
     const generateModuleContent = useCallback(async (moduleName, moduleId) => {
         setLoading(true);
         setErrorMessage('');
@@ -207,7 +265,7 @@ const App = () => {
                 parsedResources = [{ title: "No specific picks generated. Please add your own resources.", url: "#" }];
             }
             setTeacherPicks(parsedResources);
-            await updateModuleInFirestore(moduleId, { teacherPicks: parsedResources });
+            await updateModuleInFirestore(module.id, { teacherPicks: parsedResources , appId, userId});
 
             // 2. Generate Assignment Content (NEW, detailed structure)
             // MODIFIED PROMPT: Now explicitly asks for content based on moduleName, while maintaining the *structure* of the health tracker example.
@@ -411,16 +469,39 @@ const App = () => {
                 createdAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
             };
-            await setDoc(getModuleDocRef(moduleId), newModuleData);
+            const moduleRef = getModuleDocRef(moduleId);
+            if (!moduleRef) {
+                setErrorMessage("Database not ready. Please try again.");
+                setLoading(false);
+                return;
+            }
+            await setDoc(moduleRef, newModuleData);
             setCurrentModule({ id: moduleId, ...newModuleData });
             setAppPhase('assignment'); // Start directly at assignment for new modules
             setTopic('');
             console.log("New module created:", newModuleData);
             await generateModuleContent(newModuleData.name, moduleId);
-            const updatedModuleDoc = await getDoc(getModuleDocRef(moduleId));
-            if (updatedModuleDoc.exists()) {
-                const updatedData = updatedModuleDoc.data() || {};
-                setCurrentModule({ id: updatedModuleDoc.id, ...updatedData });
+            const moduleDocRef = getModuleDocRef(moduleId);
+            if (moduleDocRef) {
+                const updatedModuleDoc = await getDoc(moduleDocRef);
+                if (updatedModuleDoc.exists()) {
+                    const updatedData = updatedModuleDoc.data() || {};
+                    setCurrentModule({
+                        id: updatedModuleDoc.id,
+                        name: updatedData.name ?? '',
+                        status: updatedData.status ?? '',
+                        resources: updatedData.resources ?? [],
+                        teacherPicks: updatedData.teacherPicks ?? [],
+                        assignmentContent: updatedData.assignmentContent ?? null,
+                        assignments: updatedData.assignments ?? {},
+                        quizzes: updatedData.quizzes ?? [],
+                        finalTestScore: updatedData.finalTestScore ?? 0,
+                        certificateIssued: updatedData.certificateIssued ?? false,
+                        createdAt: updatedData.createdAt ?? '',
+                        lastUpdated: updatedData.lastUpdated ?? '',
+                        ...updatedData
+                    });
+                }
             }
             setCurrentAssignmentSectionIndex(0); // Reset to first section for new assignment
             setAssignmentResponses({}); // Clear previous responses
@@ -453,12 +534,29 @@ const App = () => {
                 setLoading(true); // Indicate loading
                 await generateModuleContent(module.name, module.id);
                 // After generation, fetch the updated module to ensure state is consistent
-                const updatedModuleDoc = await getDoc(getModuleDocRef(module.id));
-                if (updatedModuleDoc.exists()) {
-                    const updatedData = updatedModuleDoc.data() || {};
-                    setCurrentModule({ id: updatedModuleDoc.id, ...updatedData });
-                    setAssignmentContent((updatedModuleDoc.data() as any).assignmentContent); // Update assignment content state
-                    setTeacherPicks((updatedModuleDoc.data() as any).teacherPicks); // Update teacher picks state
+                const moduleDocRef = getModuleDocRef(module.id);
+                if (moduleDocRef) {
+                    const updatedModuleDoc = await getDoc(moduleDocRef);
+                    if (updatedModuleDoc.exists()) {
+                        const updatedData = updatedModuleDoc.data() || {};
+                        setCurrentModule({
+                            id: updatedModuleDoc.id,
+                            name: updatedData.name ?? '',
+                            status: updatedData.status ?? '',
+                            resources: updatedData.resources ?? [],
+                            teacherPicks: updatedData.teacherPicks ?? [],
+                            assignmentContent: updatedData.assignmentContent ?? null,
+                            assignments: updatedData.assignments ?? {},
+                            quizzes: updatedData.quizzes ?? [],
+                            finalTestScore: updatedData.finalTestScore ?? 0,
+                            certificateIssued: updatedData.certificateIssued ?? false,
+                            createdAt: updatedData.createdAt ?? '',
+                            lastUpdated: updatedData.lastUpdated ?? '',
+                            ...updatedData
+                        });
+                        setAssignmentContent((updatedModuleDoc.data() as any).assignmentContent); // Update assignment content state
+                        setTeacherPicks((updatedModuleDoc.data() as any).teacherPicks); // Update teacher picks state
+                    }
                 }
                 setLoading(false);
             }
@@ -1017,7 +1115,7 @@ const App = () => {
                             {task.type === 'text_input' && (
                                 <textarea
                                     className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-base font-mono"
-                                    rows="6"
+                                    rows={6}
                                     placeholder={`Enter your response for Task ${task.task_id} here...`}
                                     value={assignmentResponses[currentSection.section_id]?.[task.task_id] || ''}
                                     onChange={(e) => handleAssignmentResponseChange(currentSection.section_id, task.task_id, e.target.value)}
@@ -1026,7 +1124,7 @@ const App = () => {
                             {task.type === 'code_input' && (
                                 <textarea
                                     className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none text-base font-mono bg-gray-900 text-green-400"
-                                    rows="10"
+                                    rows={10}
                                     placeholder={`Write your ${task.language || 'Python'} code for Task ${task.task_id} here...`}
                                     value={assignmentResponses[currentSection.section_id]?.[task.task_id] || ''}
                                     onChange={(e) => handleAssignmentResponseChange(currentSection.section_id, task.task_id, e.target.value)}
@@ -1404,3 +1502,25 @@ const App = () => {
 };
 
 export default App;
+// Helper to update a module in Firestore
+async function updateModuleInFirestore(moduleId: string, data: { [key: string]: any }, appId: string, userId: string) {
+    if (!db || !userId) {
+        setErrorMessage("Database not ready. Please try again.");
+        return;
+    }
+    try {
+        const moduleRef = doc(db, `artifacts/${appId}/users/${userId}/modules`, moduleId);
+        await setDoc(moduleRef, data, { merge: true });
+        console.log(`Module ${moduleId} updated.`);
+    } catch (error: any) {
+        console.error("Error updating module:", error);
+        setErrorMessage(`Failed to save module progress: ${error.message}`);
+    }
+}
+// This is a fallback for setErrorMessage in case it's called outside the App component context.
+// In the main App component, setErrorMessage is a useState setter.
+// Here, we just log the error to the console as a fallback.
+function setErrorMessage(message: string) {
+    console.error("Error:", message);
+}
+
