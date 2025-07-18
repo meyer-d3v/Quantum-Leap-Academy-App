@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
-import { db, auth, firebaseConfig } from "../firebase";
+import { db, auth, firebaseConfig } from "./firebase";
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit, } from 'firebase/firestore'; // Removed orderBy import as it's not used in query
 
