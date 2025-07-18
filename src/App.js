@@ -90,13 +90,13 @@ const App = () => {
                 } else {
                     // Sign in anonymously if no token or token fails
                     try {
-                        if (initialAuthToken) {
-                            //await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                        if (initialAuthToken === null) {
+                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
                         } else {
                             await signInAnonymously(firebaseAuth);
                         }
                     } catch (error) {
-                        console.error("Firebase auth error during anonymous/custom token sign-in:", error);
+                        console.error("Firebase auth error during anonymous/custom token sign-in:" + error);
                         setErrorMessage("Failed to authenticate. Please try refreshing.");
                     }
                 }
