@@ -20,7 +20,7 @@
 .env.production.local
 
 # firebase
-firebase.js
+# firebase.js
 
 # Gemini 
 gemini.js
