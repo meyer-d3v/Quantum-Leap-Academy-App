@@ -6,7 +6,7 @@ import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit
 
 
 // Main App component for the Quantum Leap AI Education Academy
-const App = () => {
+export const App = () => {
     // --- Firebase State ---
     const [userId, setUserId] = useState<string | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false); // To ensure Firestore ops wait for auth
@@ -1501,7 +1501,7 @@ const App = () => {
     );
 };
 
-export default App;
+
 // Helper to update a module in Firestore
 async function updateModuleInFirestore(moduleId: string, data: { [key: string]: any }, appId: string, userId: string) {
     if (!db || !userId) {
