@@ -91,7 +91,7 @@ const App = () => {
                     // Sign in anonymously if no token or token fails
                     try {
                         if (initialAuthToken) {
-                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                            //await signInWithCustomToken(firebaseAuth, initialAuthToken);
                         } else {
                             await signInAnonymously(firebaseAuth);
                         }
