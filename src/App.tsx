@@ -450,10 +450,12 @@ export const App = () => {
             setErrorMessage('Please enter a topic for the new module.');
             return;
         }
-        if (!db || !userId) {
+        /*
+        if (!db || !auth.currentUser?.uid) {
             setErrorMessage("Database not ready. Please wait for authentication.");
             return;
         }
+            */
         if (!geminiApiKey) {
             setErrorMessage("Gemini API Key is not set. Please set REACT_APP_GEMINI_API_KEY in your .env file.");
             return;
