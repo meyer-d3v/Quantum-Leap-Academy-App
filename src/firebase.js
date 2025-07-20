@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 // Use useMemo to ensure firebaseConfig object is stable across renders
 // FIX: This ensures the firebaseConfig object is created only once, resolving the ESLint warning.

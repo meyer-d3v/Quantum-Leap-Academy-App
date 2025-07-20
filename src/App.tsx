@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
+import { useState, useEffect, useCallback } from 'react'; // Added useMemo
 import { db, auth, firebaseConfig } from "./firebase";
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, limit, } from 'firebase/firestore'; // Removed orderBy import as it's not used in query
+import { doc, getDoc, setDoc, onSnapshot, collection, query, limit, } from 'firebase/firestore'; // Removed orderBy import as it's not used in query
 
 
 
@@ -46,7 +46,7 @@ export const App = () => {
     const [loading, setLoading] = useState(false); // Loading indicator for AI generation
     const [errorMessage, setErrorMessage] = useState(''); // Error messages
     const [appPhase, setAppPhase] = useState('moduleSelect'); // 'moduleSelect', 'resources', 'assignment', 'quiz', 'finalTest', 'results'
-    type assessmentMetrics = {
+    type assessmentMetric = {
         practicalityTheoreticity: string;
         predictability: string;
         difficulty: string;
@@ -54,7 +54,7 @@ export const App = () => {
         learningTime: string;
         proficiencyRequired: string;
     } | null;
-    const [assessmentMetrics, setAssessmentMetrics] = useState<assessmentMetrics>(null); // AI's meta-commentary on assessment
+    const [assessmentMetrics, setAssessmentMetrics] = useState<assessmentMetric>(null); // AI's meta-commentary on assessment
     type LastScoreDetails = {
         score: number;
         comment: string;
@@ -103,6 +103,12 @@ export const App = () => {
     // --- Gemini API Key: Using process.env for standard React App ---
     const geminiApiKey = process.env.REACT_APP_GEMINI_API_KEY; // This should be in your .env file
 
+    const getScoreAndCert = () => {
+
+        console.error("Score:", score);
+        console.error("Certificate:", showCertificate);
+    }
+
     // --- Firebase Initialization and Authentication ---
     useEffect(() => {
         // Basic validation for firebaseConfig
@@ -116,6 +122,7 @@ export const App = () => {
         let unsubscribeAuth: (() => void) | null = null;
 
         try {
+            getScoreAndCert;
             // Listen for auth state changes
             unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -185,7 +192,7 @@ export const App = () => {
             if (unsubscribeAuth) unsubscribeAuth();
             if (unsubscribeModules) unsubscribeModules();
         };
-    }, [firebaseConfig, initialAuthToken, db, userId, appId, isAuthReady]);
+    }, [initialAuthToken, userId, appId, isAuthReady]);
 
     // --- Firestore Helpers ---
     // FIX: Re-added appId to useCallback dependency array to resolve ESLint warning.
@@ -435,7 +442,7 @@ export const App = () => {
         } finally {
             setLoading(false);
         }
-    }, [geminiApiKey, updateModuleInFirestore]);
+    }, [geminiApiKey, updateModuleInFirestore, appId, userId]);
 
     // --- Module Management ---
     const createNewModule = async () => {
@@ -1503,6 +1510,7 @@ export const App = () => {
 
 
 // Helper to update a module in Firestore
+/*
 async function updateModuleInFirestore(moduleId: string, data: { [key: string]: any }, appId: string, userId: string) {
     if (!db || !userId) {
         setErrorMessage("Database not ready. Please try again.");
@@ -1515,8 +1523,10 @@ async function updateModuleInFirestore(moduleId: string, data: { [key: string]: 
     } catch (error: any) {
         console.error("Error updating module:", error);
         setErrorMessage(`Failed to save module progress: ${error.message}`);
+        
     }
 }
+    */
 // This is a fallback for setErrorMessage in case it's called outside the App component context.
 // In the main App component, setErrorMessage is a useState setter.
 // Here, we just log the error to the console as a fallback.
