@@ -192,7 +192,7 @@ export const App = () => {
             if (unsubscribeAuth) unsubscribeAuth();
             if (unsubscribeModules) unsubscribeModules();
         };
-    }, [initialAuthToken, userId, appId, isAuthReady]);
+    }, [initialAuthToken, userId, appId, isAuthReady, getScoreAndCert]);
 
     // --- Firestore Helpers ---
     // FIX: Re-added appId to useCallback dependency array to resolve ESLint warning.
@@ -1526,11 +1526,13 @@ async function updateModuleInFirestore(moduleId: string, data: { [key: string]: 
         
     }
 }
-    */
+   
 // This is a fallback for setErrorMessage in case it's called outside the App component context.
 // In the main App component, setErrorMessage is a useState setter.
 // Here, we just log the error to the console as a fallback.
 function setErrorMessage(message: string) {
     console.error("Error:", message);
 }
+
+ */
 
