@@ -122,7 +122,7 @@ export const App = () => {
         let unsubscribeAuth: (() => void) | null = null;
 
         try {
-            getScoreAndCert;
+            getScoreAndCert();
             // Listen for auth state changes
             unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
                 if (user) {
