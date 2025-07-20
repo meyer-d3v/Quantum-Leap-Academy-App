@@ -459,7 +459,7 @@ export const App = () => {
             return;
         }
 
-        getScoreAndCert;
+        getScoreAndCert();
 
         setLoading(true);
         setErrorMessage('');
