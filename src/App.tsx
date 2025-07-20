@@ -105,8 +105,8 @@ export const App = () => {
 
     const getScoreAndCert = () => {
 
-        console.error("Score:", score);
-        console.error("Certificate:", showCertificate);
+        console.log("Score:", score);
+        console.log("Certificate:", showCertificate);
     }
 
     // --- Firebase Initialization and Authentication ---
