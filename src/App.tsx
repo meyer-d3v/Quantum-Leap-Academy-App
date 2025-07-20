@@ -122,7 +122,7 @@ export const App = () => {
         let unsubscribeAuth: (() => void) | null = null;
 
         try {
-            getScoreAndCert();
+            
             // Listen for auth state changes
             unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -192,7 +192,7 @@ export const App = () => {
             if (unsubscribeAuth) unsubscribeAuth();
             if (unsubscribeModules) unsubscribeModules();
         };
-    }, [initialAuthToken, userId, appId, isAuthReady, getScoreAndCert]);
+    }, [initialAuthToken, userId, appId, isAuthReady]);
 
     // --- Firestore Helpers ---
     // FIX: Re-added appId to useCallback dependency array to resolve ESLint warning.
@@ -458,6 +458,8 @@ export const App = () => {
             setErrorMessage("Gemini API Key is not set. Please set REACT_APP_GEMINI_API_KEY in your .env file.");
             return;
         }
+
+        getScoreAndCert;
 
         setLoading(true);
         setErrorMessage('');
